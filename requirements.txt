@@ -3,3 +3,4 @@ pandas
 plotly
 scipy
 reportlab
+kaleido>=1.0.0
