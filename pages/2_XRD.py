@@ -675,9 +675,7 @@ except Exception as e:
         # PDF REPORT
         # -------------------------------------------------
 
-        st.subheader(
-            "PDF Report"
-        )
+        st.subheader("PDF Report")
 
         st.write(
             "Generate a complete XRD characterization report "
