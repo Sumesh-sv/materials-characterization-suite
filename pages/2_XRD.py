@@ -1,11 +1,16 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+
 from io import BytesIO
+import tempfile
+import os
 
 from xrd_preprocessing import preprocess_xrd
 from xrd_analysis import analyze_graphitic_xrd
 from xrd_interpretation import interpret_xrd
+from pdf_report import create_pdf
 
 
 # ---------------------------------------------------------
@@ -19,6 +24,7 @@ st.set_page_config(
 )
 
 st.title("📊 XRD Analysis Suite")
+
 st.write(
     "Upload an XRD data file to preprocess the pattern, "
     "detect graphitic peaks, and calculate structural parameters."
@@ -26,8 +32,43 @@ st.write(
 
 
 # ---------------------------------------------------------
+# SAMPLE / MATERIAL INFORMATION
+# ---------------------------------------------------------
+
+st.subheader("Sample Information")
+
+info_col1, info_col2 = st.columns(2)
+
+with info_col1:
+
+    sample_name = st.text_input(
+        "Sample Name",
+        placeholder="e.g. GNP-BJ"
+    )
+
+    material = st.text_input(
+        "Material",
+        placeholder="e.g. Graphene Nanoplatelets"
+    )
+
+with info_col2:
+
+    operator = st.text_input(
+        "Operator",
+        placeholder="Enter operator name"
+    )
+
+    comments = st.text_area(
+        "Comments",
+        placeholder="Enter any additional information about the sample..."
+    )
+
+
+# ---------------------------------------------------------
 # FILE UPLOAD
 # ---------------------------------------------------------
+
+st.subheader("XRD Data")
 
 uploaded_file = st.file_uploader(
     "Upload XRD data file",
@@ -37,7 +78,9 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
 
-    st.success(f"File uploaded: {uploaded_file.name}")
+    st.success(
+        f"File uploaded: {uploaded_file.name}"
+    )
 
     # -----------------------------------------------------
     # READ DATA
@@ -45,8 +88,6 @@ if uploaded_file is not None:
 
     try:
 
-        # Read the file using whitespace separation
-        # This replaces the deprecated delim_whitespace=True
         data = pd.read_csv(
             uploaded_file,
             sep=r"\s+",
@@ -55,15 +96,21 @@ if uploaded_file is not None:
         )
 
         # Remove completely empty columns
-        data = data.dropna(axis=1, how="all")
+        data = data.dropna(
+            axis=1,
+            how="all"
+        )
 
         if data.shape[1] < 2:
+
             st.error(
                 "The uploaded file must contain at least "
                 "two columns: 2θ and intensity."
             )
+
             st.stop()
 
+        # Convert first two columns to numeric
         two_theta = pd.to_numeric(
             data.iloc[:, 0],
             errors="coerce"
@@ -74,13 +121,33 @@ if uploaded_file is not None:
             errors="coerce"
         ).to_numpy()
 
+        # Remove invalid values
+        valid = (
+            np.isfinite(two_theta)
+            & np.isfinite(intensity)
+        )
+
+        two_theta = two_theta[valid]
+        intensity = intensity[valid]
+
+        if len(two_theta) < 10:
+
+            st.error(
+                "Not enough valid XRD data points were found."
+            )
+
+            st.stop()
+
         st.success(
             f"Loaded {len(two_theta)} XRD data points."
         )
 
     except Exception as e:
 
-        st.error(f"Could not read the XRD file: {e}")
+        st.error(
+            f"Could not read the XRD file: {e}"
+        )
+
         st.stop()
 
 
@@ -90,10 +157,12 @@ if uploaded_file is not None:
 
     st.subheader("Raw XRD Pattern")
 
+    raw_plot_df = pd.DataFrame({
+        "Intensity": intensity
+    }, index=two_theta)
+
     st.line_chart(
-        pd.DataFrame({
-            "Intensity": intensity
-        }, index=two_theta)
+        raw_plot_df
     )
 
 
@@ -105,7 +174,10 @@ if uploaded_file is not None:
 
     smoothing = st.sidebar.selectbox(
         "Smoothing method",
-        ["Gaussian", "Savitzky-Golay"]
+        [
+            "Gaussian",
+            "Savitzky-Golay"
+        ]
     )
 
     sigma = st.sidebar.slider(
@@ -128,6 +200,29 @@ if uploaded_file is not None:
 
 
     # -----------------------------------------------------
+    # PEAK DETECTION SETTINGS
+    # -----------------------------------------------------
+
+    st.sidebar.header("Peak Detection")
+
+    peak_height = st.sidebar.slider(
+        "Peak height",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.05,
+        step=0.01
+    )
+
+    peak_prominence = st.sidebar.slider(
+        "Peak prominence",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.02,
+        step=0.01
+    )
+
+
+    # -----------------------------------------------------
     # ANALYZE BUTTON
     # -----------------------------------------------------
 
@@ -136,7 +231,9 @@ if uploaded_file is not None:
         type="primary"
     ):
 
-        with st.spinner("Processing XRD pattern..."):
+        with st.spinner(
+            "Processing XRD pattern..."
+        ):
 
             try:
 
@@ -160,7 +257,9 @@ if uploaded_file is not None:
 
                 result = analyze_graphitic_xrd(
                     processed["two_theta"],
-                    processed["smoothed"]
+                    processed["smoothed"],
+                    height=peak_height,
+                    prominence=peak_prominence
                 )
 
 
@@ -173,10 +272,35 @@ if uploaded_file is not None:
                 )
 
 
-                # Save results
-                st.session_state["xrd_result"] = result
-                st.session_state["xrd_processed"] = processed
-                st.session_state["xrd_interpretation"] = interpretation
+                # -----------------------------------------
+                # SAVE RESULTS
+                # -----------------------------------------
+
+                st.session_state[
+                    "xrd_result"
+                ] = result
+
+                st.session_state[
+                    "xrd_processed"
+                ] = processed
+
+                st.session_state[
+                    "xrd_interpretation"
+                ] = interpretation
+
+                st.session_state[
+                    "xrd_sample_info"
+                ] = {
+                    "sample_name": sample_name,
+                    "material": material,
+                    "operator": operator,
+                    "comments": comments
+                }
+
+                st.session_state[
+                    "xrd_filename"
+                ] = uploaded_file.name
+
 
                 st.success(
                     "XRD analysis completed successfully."
@@ -187,6 +311,7 @@ if uploaded_file is not None:
                 st.error(
                     f"Error during XRD analysis: {e}"
                 )
+
                 st.exception(e)
 
 
@@ -196,49 +321,85 @@ if uploaded_file is not None:
 
     if "xrd_result" in st.session_state:
 
-        result = st.session_state["xrd_result"]
+        result = st.session_state[
+            "xrd_result"
+        ]
+
+        processed = st.session_state[
+            "xrd_processed"
+        ]
+
+        interpretation = st.session_state[
+            "xrd_interpretation"
+        ]
 
         st.divider()
 
-        st.subheader("XRD Structural Parameters")
+        st.subheader(
+            "XRD Structural Parameters"
+        )
 
+
+        # -------------------------------------------------
+        # STRUCTURAL PARAMETERS
+        # -------------------------------------------------
 
         col1, col2, col3 = st.columns(3)
 
+
         with col1:
 
-            d002 = result.get("d002", np.nan)
+            d002 = result.get(
+                "d002",
+                np.nan
+            )
 
             st.metric(
                 "d₀₀₂ (nm)",
-                "N/A" if np.isnan(d002)
-                else f"{d002:.4f}"
+                (
+                    "N/A"
+                    if np.isnan(d002)
+                    else f"{d002:.4f}"
+                )
             )
 
 
         with col2:
 
-            Lc = result.get("Lc", np.nan)
+            Lc = result.get(
+                "Lc",
+                np.nan
+            )
 
             st.metric(
                 "Lc (nm)",
-                "N/A" if np.isnan(Lc)
-                else f"{Lc:.2f}"
+                (
+                    "N/A"
+                    if np.isnan(Lc)
+                    else f"{Lc:.2f}"
+                )
             )
 
 
         with col3:
 
-            layers = result.get("Layers", np.nan)
+            layers = result.get(
+                "Layers",
+                np.nan
+            )
 
             st.metric(
                 "Number of Layers",
-                "N/A" if np.isnan(layers)
-                else f"{layers:.0f}"
+                (
+                    "N/A"
+                    if np.isnan(layers)
+                    else f"{layers:.0f}"
+                )
             )
 
 
         col4, col5 = st.columns(2)
+
 
         with col4:
 
@@ -249,8 +410,11 @@ if uploaded_file is not None:
 
             st.metric(
                 "Packing Density (g/cm³)",
-                "N/A" if np.isnan(density)
-                else f"{density:.3f}"
+                (
+                    "N/A"
+                    if np.isnan(density)
+                    else f"{density:.3f}"
+                )
             )
 
 
@@ -263,8 +427,11 @@ if uploaded_file is not None:
 
             st.metric(
                 "Graphitization (%)",
-                "N/A" if np.isnan(graphitization)
-                else f"{graphitization:.1f}"
+                (
+                    "N/A"
+                    if np.isnan(graphitization)
+                    else f"{graphitization:.1f}"
+                )
             )
 
 
@@ -272,31 +439,50 @@ if uploaded_file is not None:
         # PEAK INFORMATION
         # -------------------------------------------------
 
-        st.subheader("Detected Graphitic Peaks")
+        st.subheader(
+            "Detected Graphitic Peaks"
+        )
 
         peak_rows = []
 
-        for peak_name in ["002", "100", "004"]:
 
-            peak = result.get(peak_name)
+        for peak_name in [
+            "002",
+            "100",
+            "004"
+        ]:
+
+            peak = result.get(
+                peak_name
+            )
 
             if peak is not None:
 
                 peak_rows.append({
+
                     "Peak": peak_name,
+
                     "2θ (°)": round(
-                        peak["position"], 3
+                        peak["position"],
+                        3
                     ),
+
                     "Intensity": round(
-                        peak["intensity"], 4
+                        peak["intensity"],
+                        4
                     ),
+
                     "FWHM (°)": round(
-                        peak["FWHM"], 4
+                        peak["FWHM"],
+                        4
                     ),
+
                     "Prominence": round(
-                        peak["prominence"], 4
+                        peak["prominence"],
+                        4
                     )
                 })
+
 
         if peak_rows:
 
@@ -318,34 +504,40 @@ if uploaded_file is not None:
 
 
         # -------------------------------------------------
-        # INTERPRETATION
+        # AUTOMATIC INTERPRETATION
         # -------------------------------------------------
 
-        st.subheader("Automatic Interpretation")
+        st.subheader(
+            "Automatic Interpretation"
+        )
 
-        for comment in st.session_state[
-            "xrd_interpretation"
-        ]:
+        for comment in interpretation:
 
-            st.write(comment)
+            st.write(
+                comment
+            )
 
 
         # -------------------------------------------------
-        # PROCESSED XRD PLOT
+        # PROCESSED XRD PATTERN
         # -------------------------------------------------
 
-        st.subheader("Processed XRD Pattern")
-
-        processed = st.session_state[
-            "xrd_processed"
-        ]
+        st.subheader(
+            "Processed XRD Pattern"
+        )
 
         plot_df = pd.DataFrame({
+
             "2θ": processed["two_theta"],
+
             "Raw": processed["raw"],
+
             "Baseline": processed["baseline"],
+
             "Corrected": processed["corrected"],
+
             "Smoothed": processed["smoothed"]
+
         })
 
         st.line_chart(
@@ -354,31 +546,127 @@ if uploaded_file is not None:
 
 
         # -------------------------------------------------
-        # EXCEL DOWNLOAD
+        # MATERIAL INFORMATION DISPLAY
         # -------------------------------------------------
 
-        export_data = {
+        st.subheader(
+            "Sample Information"
+        )
+
+        sample_info = st.session_state[
+            "xrd_sample_info"
+        ]
+
+        info_display = pd.DataFrame({
+
             "Parameter": [
-                "d002 (nm)",
-                "Lc (nm)",
-                "Number of Layers",
-                "Packing Density (g/cm³)",
-                "Graphitization (%)"
+                "Sample Name",
+                "Material",
+                "Operator",
+                "Comments"
             ],
 
             "Value": [
-                result.get("d002"),
-                result.get("Lc"),
-                result.get("Layers"),
-                result.get("Density"),
-                result.get("Graphitization")
+                sample_info.get(
+                    "sample_name",
+                    ""
+                ),
+
+                sample_info.get(
+                    "material",
+                    ""
+                ),
+
+                sample_info.get(
+                    "operator",
+                    ""
+                ),
+
+                sample_info.get(
+                    "comments",
+                    ""
+                )
+            ]
+        })
+
+        st.dataframe(
+            info_display,
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+        # -------------------------------------------------
+        # EXCEL DOWNLOAD
+        # -------------------------------------------------
+
+        st.subheader(
+            "Download Results"
+        )
+
+        export_data = {
+
+            "Parameter": [
+
+                "d002 (nm)",
+
+                "Lc (nm)",
+
+                "Number of Layers",
+
+                "Packing Density (g/cm³)",
+
+                "Graphitization (%)"
+
+            ],
+
+            "Value": [
+
+                result.get(
+                    "d002"
+                ),
+
+                result.get(
+                    "Lc"
+                ),
+
+                result.get(
+                    "Layers"
+                ),
+
+                result.get(
+                    "Density"
+                ),
+
+                result.get(
+                    "Graphitization"
+                )
+
             ]
         }
+
 
         export_df = pd.DataFrame(
             export_data
         )
 
+
+        excel_buffer = BytesIO()
+
+
+        with pd.ExcelWriter(
+            excel_buffer,
+            engine="openpyxl"
+        ):
+
+            export_df.to_excel(
+                excel_buffer,
+                index=False,
+                sheet_name="XRD Results"
+            )
+
+            # Re-open correctly through ExcelWriter
+            # for the detected peak sheet
         excel_buffer = BytesIO()
 
         with pd.ExcelWriter(
@@ -400,13 +688,243 @@ if uploaded_file is not None:
                     sheet_name="Detected Peaks"
                 )
 
+            info_display.to_excel(
+                writer,
+                index=False,
+                sheet_name="Sample Information"
+            )
+
 
         st.download_button(
+
             "📥 Download XRD Results",
+
             data=excel_buffer.getvalue(),
+
             file_name="XRD_Results.xlsx",
+
             mime=(
                 "application/vnd.openxmlformats-officedocument."
                 "spreadsheetml.sheet"
             )
         )
+
+
+        # -------------------------------------------------
+        # PDF REPORT
+        # -------------------------------------------------
+
+        st.subheader(
+            "PDF Report"
+        )
+
+        st.write(
+            "Generate a complete XRD characterization report "
+            "containing sample information, XRD plot, peak "
+            "information, calculated parameters, and interpretation."
+        )
+
+
+        if st.button(
+            "📄 Generate XRD PDF Report",
+            type="secondary"
+        ):
+
+            with st.spinner(
+                "Generating PDF report..."
+            ):
+
+                try:
+
+                    # -------------------------------------
+                    # CREATE MATPLOTLIB FIGURE
+                    # -------------------------------------
+
+                    fig, ax = plt.subplots(
+                        figsize=(10, 5)
+                    )
+
+                    ax.plot(
+                        processed["two_theta"],
+                        processed["raw"],
+                        label="Raw",
+                        linewidth=1
+                    )
+
+                    ax.plot(
+                        processed["two_theta"],
+                        processed["smoothed"],
+                        label="Processed",
+                        linewidth=1.2
+                    )
+
+
+                    # -------------------------------------
+                    # MARK DETECTED PEAKS
+                    # -------------------------------------
+
+                    for peak_name in [
+                        "002",
+                        "100",
+                        "004"
+                    ]:
+
+                        peak = result.get(
+                            peak_name
+                        )
+
+                        if peak is not None:
+
+                            ax.axvline(
+                                peak["position"],
+                                linestyle="--",
+                                linewidth=0.8
+                            )
+
+                            ax.text(
+                                peak["position"],
+                                peak["intensity"],
+                                peak_name,
+                                rotation=90,
+                                verticalalignment="bottom"
+                            )
+
+
+                    ax.set_xlabel(
+                        "2θ (°)"
+                    )
+
+                    ax.set_ylabel(
+                        "Intensity"
+                    )
+
+                    ax.set_title(
+                        "XRD Pattern"
+                    )
+
+                    ax.legend()
+
+                    ax.grid(
+                        alpha=0.25
+                    )
+
+                    fig.tight_layout()
+
+
+                    # -------------------------------------
+                    # SAVE FIGURE TEMPORARILY
+                    # -------------------------------------
+
+                    with tempfile.NamedTemporaryFile(
+                        suffix=".png",
+                        delete=False
+                    ) as temp_image:
+
+                        figure_path = (
+                            temp_image.name
+                        )
+
+
+                    fig.savefig(
+                        figure_path,
+                        dpi=200,
+                        bbox_inches="tight"
+                    )
+
+                    plt.close(fig)
+
+
+                    # -------------------------------------
+                    # CREATE PDF
+                    # -------------------------------------
+
+                    with tempfile.NamedTemporaryFile(
+                        suffix=".pdf",
+                        delete=False
+                    ) as temp_pdf:
+
+                        pdf_path = (
+                            temp_pdf.name
+                        )
+
+
+                    create_pdf(
+
+                        filename=pdf_path,
+
+                        sample_info=sample_info,
+
+                        analysis_type="XRD",
+
+                        result=result,
+
+                        interpretation=interpretation,
+
+                        figure_path=figure_path
+                    )
+
+
+                    # -------------------------------------
+                    # READ PDF
+                    # -------------------------------------
+
+                    with open(
+                        pdf_path,
+                        "rb"
+                    ) as pdf_file:
+
+                        pdf_data = (
+                            pdf_file.read()
+                        )
+
+
+                    # -------------------------------------
+                    # DOWNLOAD BUTTON
+                    # -------------------------------------
+
+                    st.success(
+                        "PDF report generated successfully."
+                    )
+
+
+                    st.download_button(
+
+                        label="📥 Download XRD PDF Report",
+
+                        data=pdf_data,
+
+                        file_name=(
+                            f"{sample_info.get('sample_name', 'XRD')}"
+                            "_XRD_Report.pdf"
+                        ),
+
+                        mime="application/pdf"
+                    )
+
+
+                    # -------------------------------------
+                    # CLEAN TEMP FILES
+                    # -------------------------------------
+
+                    try:
+
+                        os.remove(
+                            figure_path
+                        )
+
+                        os.remove(
+                            pdf_path
+                        )
+
+                    except Exception:
+
+                        pass
+
+
+                except Exception as e:
+
+                    st.error(
+                        f"Could not generate PDF report: {e}"
+                    )
+
+                    st.exception(e)
