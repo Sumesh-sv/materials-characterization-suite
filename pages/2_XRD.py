@@ -13,9 +13,9 @@ from xrd_interpretation import interpret_xrd
 from pdf_report import create_pdf
 
 
-# ---------------------------------------------------------
+# =========================================================
 # PAGE CONFIGURATION
-# ---------------------------------------------------------
+# =========================================================
 
 st.set_page_config(
     page_title="XRD Analysis",
@@ -31,16 +31,15 @@ st.write(
 )
 
 
-# ---------------------------------------------------------
-# SAMPLE / MATERIAL INFORMATION
-# ---------------------------------------------------------
+# =========================================================
+# SAMPLE INFORMATION
+# =========================================================
 
 st.subheader("Sample Information")
 
-info_col1, info_col2 = st.columns(2)
+col1, col2 = st.columns(2)
 
-with info_col1:
-
+with col1:
     sample_name = st.text_input(
         "Sample Name",
         placeholder="e.g. GNP-BJ"
@@ -51,8 +50,7 @@ with info_col1:
         placeholder="e.g. Graphene Nanoplatelets"
     )
 
-with info_col2:
-
+with col2:
     operator = st.text_input(
         "Operator",
         placeholder="Enter operator name"
@@ -60,13 +58,13 @@ with info_col2:
 
     comments = st.text_area(
         "Comments",
-        placeholder="Enter any additional information about the sample..."
+        placeholder="Enter additional information about the sample."
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # FILE UPLOAD
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("XRD Data")
 
@@ -82,9 +80,9 @@ if uploaded_file is not None:
         f"File uploaded: {uploaded_file.name}"
     )
 
-    # -----------------------------------------------------
+    # =====================================================
     # READ DATA
-    # -----------------------------------------------------
+    # =====================================================
 
     try:
 
@@ -95,7 +93,6 @@ if uploaded_file is not None:
             header=None
         )
 
-        # Remove completely empty columns
         data = data.dropna(
             axis=1,
             how="all"
@@ -110,7 +107,6 @@ if uploaded_file is not None:
 
             st.stop()
 
-        # Convert first two columns to numeric
         two_theta = pd.to_numeric(
             data.iloc[:, 0],
             errors="coerce"
@@ -151,24 +147,27 @@ if uploaded_file is not None:
         st.stop()
 
 
-    # -----------------------------------------------------
-    # DISPLAY RAW DATA
-    # -----------------------------------------------------
+    # =====================================================
+    # RAW XRD PATTERN
+    # =====================================================
 
     st.subheader("Raw XRD Pattern")
 
-    raw_plot_df = pd.DataFrame({
-        "Intensity": intensity
-    }, index=two_theta)
+    raw_plot_df = pd.DataFrame(
+        {
+            "Intensity": intensity
+        },
+        index=two_theta
+    )
 
     st.line_chart(
         raw_plot_df
     )
 
 
-    # -----------------------------------------------------
-    # PREPROCESSING SETTINGS
-    # -----------------------------------------------------
+    # =====================================================
+    # SIDEBAR - PREPROCESSING
+    # =====================================================
 
     st.sidebar.header("Preprocessing")
 
@@ -199,9 +198,9 @@ if uploaded_file is not None:
     )
 
 
-    # -----------------------------------------------------
-    # PEAK DETECTION SETTINGS
-    # -----------------------------------------------------
+    # =====================================================
+    # SIDEBAR - PEAK DETECTION
+    # =====================================================
 
     st.sidebar.header("Peak Detection")
 
@@ -222,9 +221,9 @@ if uploaded_file is not None:
     )
 
 
-    # -----------------------------------------------------
+    # =====================================================
     # ANALYZE BUTTON
-    # -----------------------------------------------------
+    # =====================================================
 
     if st.button(
         "🔬 Analyze XRD",
@@ -252,7 +251,7 @@ if uploaded_file is not None:
 
 
                 # -----------------------------------------
-                # ANALYSIS
+                # XRD ANALYSIS
                 # -----------------------------------------
 
                 result = analyze_graphitic_xrd(
@@ -273,34 +272,36 @@ if uploaded_file is not None:
 
 
                 # -----------------------------------------
-                # SAVE RESULTS
+                # SAMPLE INFORMATION
                 # -----------------------------------------
 
-                st.session_state[
-                    "xrd_result"
-                ] = result
-
-                st.session_state[
-                    "xrd_processed"
-                ] = processed
-
-                st.session_state[
-                    "xrd_interpretation"
-                ] = interpretation
-
-                st.session_state[
-                    "xrd_sample_info"
-                ] = {
+                sample_info = {
                     "sample_name": sample_name,
                     "material": material,
                     "operator": operator,
                     "comments": comments
                 }
 
-                st.session_state[
-                    "xrd_filename"
-                ] = uploaded_file.name
 
+                # -----------------------------------------
+                # SAVE TO SESSION STATE
+                # -----------------------------------------
+
+                st.session_state["xrd_result"] = result
+
+                st.session_state["xrd_processed"] = processed
+
+                st.session_state["xrd_interpretation"] = (
+                    interpretation
+                )
+
+                st.session_state["xrd_sample_info"] = (
+                    sample_info
+                )
+
+                st.session_state["xrd_filename"] = (
+                    uploaded_file.name
+                )
 
                 st.success(
                     "XRD analysis completed successfully."
@@ -315,9 +316,9 @@ if uploaded_file is not None:
                 st.exception(e)
 
 
-    # -----------------------------------------------------
-    # SHOW RESULTS
-    # -----------------------------------------------------
+    # =====================================================
+    # RESULTS
+    # =====================================================
 
     if "xrd_result" in st.session_state:
 
@@ -333,16 +334,22 @@ if uploaded_file is not None:
             "xrd_interpretation"
         ]
 
+        sample_info = st.session_state[
+            "xrd_sample_info"
+        ]
+
+
         st.divider()
+
+
+        # =================================================
+        # STRUCTURAL PARAMETERS
+        # =================================================
 
         st.subheader(
             "XRD Structural Parameters"
         )
 
-
-        # -------------------------------------------------
-        # STRUCTURAL PARAMETERS
-        # -------------------------------------------------
 
         col1, col2, col3 = st.columns(3)
 
@@ -354,13 +361,14 @@ if uploaded_file is not None:
                 np.nan
             )
 
+            if np.isnan(d002):
+                d002_display = "N/A"
+            else:
+                d002_display = f"{d002:.4f}"
+
             st.metric(
                 "d₀₀₂ (nm)",
-                (
-                    "N/A"
-                    if np.isnan(d002)
-                    else f"{d002:.4f}"
-                )
+                d002_display
             )
 
 
@@ -371,13 +379,14 @@ if uploaded_file is not None:
                 np.nan
             )
 
+            if np.isnan(Lc):
+                Lc_display = "N/A"
+            else:
+                Lc_display = f"{Lc:.2f}"
+
             st.metric(
                 "Lc (nm)",
-                (
-                    "N/A"
-                    if np.isnan(Lc)
-                    else f"{Lc:.2f}"
-                )
+                Lc_display
             )
 
 
@@ -388,13 +397,14 @@ if uploaded_file is not None:
                 np.nan
             )
 
+            if np.isnan(layers):
+                layers_display = "N/A"
+            else:
+                layers_display = f"{layers:.0f}"
+
             st.metric(
                 "Number of Layers",
-                (
-                    "N/A"
-                    if np.isnan(layers)
-                    else f"{layers:.0f}"
-                )
+                layers_display
             )
 
 
@@ -408,13 +418,14 @@ if uploaded_file is not None:
                 np.nan
             )
 
+            if np.isnan(density):
+                density_display = "N/A"
+            else:
+                density_display = f"{density:.3f}"
+
             st.metric(
                 "Packing Density (g/cm³)",
-                (
-                    "N/A"
-                    if np.isnan(density)
-                    else f"{density:.3f}"
-                )
+                density_display
             )
 
 
@@ -425,19 +436,22 @@ if uploaded_file is not None:
                 np.nan
             )
 
+            if np.isnan(graphitization):
+                graphitization_display = "N/A"
+            else:
+                graphitization_display = (
+                    f"{graphitization:.1f}"
+                )
+
             st.metric(
                 "Graphitization (%)",
-                (
-                    "N/A"
-                    if np.isnan(graphitization)
-                    else f"{graphitization:.1f}"
-                )
+                graphitization_display
             )
 
 
-        # -------------------------------------------------
-        # PEAK INFORMATION
-        # -------------------------------------------------
+        # =================================================
+        # DETECTED PEAKS
+        # =================================================
 
         st.subheader(
             "Detected Graphitic Peaks"
@@ -458,30 +472,31 @@ if uploaded_file is not None:
 
             if peak is not None:
 
-                peak_rows.append({
+                peak_rows.append(
+                    {
+                        "Peak": peak_name,
 
-                    "Peak": peak_name,
+                        "2θ (°)": round(
+                            peak["position"],
+                            3
+                        ),
 
-                    "2θ (°)": round(
-                        peak["position"],
-                        3
-                    ),
+                        "Intensity": round(
+                            peak["intensity"],
+                            4
+                        ),
 
-                    "Intensity": round(
-                        peak["intensity"],
-                        4
-                    ),
+                        "FWHM (°)": round(
+                            peak["FWHM"],
+                            4
+                        ),
 
-                    "FWHM (°)": round(
-                        peak["FWHM"],
-                        4
-                    ),
-
-                    "Prominence": round(
-                        peak["prominence"],
-                        4
-                    )
-                })
+                        "Prominence": round(
+                            peak["prominence"],
+                            4
+                        )
+                    }
+                )
 
 
         if peak_rows:
@@ -499,13 +514,14 @@ if uploaded_file is not None:
         else:
 
             st.warning(
-                "No characteristic graphitic peaks were detected."
+                "No characteristic graphitic peaks "
+                "were detected."
             )
 
 
-        # -------------------------------------------------
+        # =================================================
         # AUTOMATIC INTERPRETATION
-        # -------------------------------------------------
+        # =================================================
 
         st.subheader(
             "Automatic Interpretation"
@@ -518,76 +534,73 @@ if uploaded_file is not None:
             )
 
 
-        # -------------------------------------------------
+        # =================================================
         # PROCESSED XRD PATTERN
-        # -------------------------------------------------
+        # =================================================
 
         st.subheader(
             "Processed XRD Pattern"
         )
 
-        plot_df = pd.DataFrame({
+        plot_df = pd.DataFrame(
+            {
+                "2θ": processed["two_theta"],
 
-            "2θ": processed["two_theta"],
+                "Raw": processed["raw"],
 
-            "Raw": processed["raw"],
+                "Baseline": processed["baseline"],
 
-            "Baseline": processed["baseline"],
+                "Corrected": processed["corrected"],
 
-            "Corrected": processed["corrected"],
-
-            "Smoothed": processed["smoothed"]
-
-        })
+                "Smoothed": processed["smoothed"]
+            }
+        )
 
         st.line_chart(
             plot_df.set_index("2θ")
         )
 
 
-        # -------------------------------------------------
-        # MATERIAL INFORMATION DISPLAY
-        # -------------------------------------------------
+        # =================================================
+        # SAMPLE INFORMATION
+        # =================================================
 
         st.subheader(
             "Sample Information"
         )
 
-        sample_info = st.session_state[
-            "xrd_sample_info"
-        ]
+        info_display = pd.DataFrame(
+            {
+                "Parameter": [
+                    "Sample Name",
+                    "Material",
+                    "Operator",
+                    "Comments"
+                ],
 
-        info_display = pd.DataFrame({
+                "Value": [
+                    sample_info.get(
+                        "sample_name",
+                        ""
+                    ),
 
-            "Parameter": [
-                "Sample Name",
-                "Material",
-                "Operator",
-                "Comments"
-            ],
+                    sample_info.get(
+                        "material",
+                        ""
+                    ),
 
-            "Value": [
-                sample_info.get(
-                    "sample_name",
-                    ""
-                ),
+                    sample_info.get(
+                        "operator",
+                        ""
+                    ),
 
-                sample_info.get(
-                    "material",
-                    ""
-                ),
-
-                sample_info.get(
-                    "operator",
-                    ""
-                ),
-
-                sample_info.get(
-                    "comments",
-                    ""
-                )
-            ]
-        })
+                    sample_info.get(
+                        "comments",
+                        ""
+                    )
+                ]
+            }
+        )
 
         st.dataframe(
             info_display,
@@ -596,91 +609,107 @@ if uploaded_file is not None:
         )
 
 
-        # -------------------------------------------------
-# EXCEL DOWNLOAD
-# -------------------------------------------------
+        # =================================================
+        # DOWNLOAD SECTION
+        # =================================================
 
-st.subheader("Download Results")
-
-export_data = {
-    "Parameter": [
-        "d002 (nm)",
-        "Lc (nm)",
-        "Number of Layers",
-        "Packing Density (g/cm³)",
-        "Graphitization (%)"
-    ],
-    "Value": [
-        result.get("d002"),
-        result.get("Lc"),
-        result.get("Layers"),
-        result.get("Density"),
-        result.get("Graphitization")
-    ]
-}
-
-export_df = pd.DataFrame(export_data)
-
-excel_buffer = BytesIO()
-
-try:
-
-    with pd.ExcelWriter(
-        excel_buffer,
-        engine="openpyxl"
-    ) as writer:
-
-        # XRD calculated parameters
-        export_df.to_excel(
-            writer,
-            index=False,
-            sheet_name="XRD Results"
+        st.subheader(
+            "Download Results"
         )
 
-        # Detected peaks
-        if peak_rows:
 
-            peak_df.to_excel(
-                writer,
-                index=False,
-                sheet_name="Detected Peaks"
+        # =================================================
+        # EXCEL FILE
+        # =================================================
+
+        export_df = pd.DataFrame(
+            {
+                "Parameter": [
+                    "d002 (nm)",
+                    "Lc (nm)",
+                    "Number of Layers",
+                    "Packing Density (g/cm³)",
+                    "Graphitization (%)"
+                ],
+
+                "Value": [
+                    result.get("d002"),
+                    result.get("Lc"),
+                    result.get("Layers"),
+                    result.get("Density"),
+                    result.get("Graphitization")
+                ]
+            }
+        )
+
+
+        excel_buffer = BytesIO()
+
+
+        try:
+
+            with pd.ExcelWriter(
+                excel_buffer,
+                engine="openpyxl"
+            ) as writer:
+
+                export_df.to_excel(
+                    writer,
+                    index=False,
+                    sheet_name="XRD Results"
+                )
+
+                if peak_rows:
+
+                    peak_df.to_excel(
+                        writer,
+                        index=False,
+                        sheet_name="Detected Peaks"
+                    )
+
+                info_display.to_excel(
+                    writer,
+                    index=False,
+                    sheet_name="Sample Information"
+                )
+
+
+            excel_data = (
+                excel_buffer.getvalue()
             )
 
-        # Sample information
-        info_display.to_excel(
-            writer,
-            index=False,
-            sheet_name="Sample Information"
-        )
 
-    excel_data = excel_buffer.getvalue()
+            st.download_button(
+                label="📥 Download XRD Results",
+                data=excel_data,
+                file_name="XRD_Results.xlsx",
+                mime=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                )
+            )
 
-    st.download_button(
-        label="📥 Download XRD Results",
-        data=excel_data,
-        file_name="XRD_Results.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        )
-    )
 
-except Exception as e:
+        except Exception as e:
 
-    st.error(
-        f"Could not generate Excel file: {e}"
-    )
+            st.error(
+                f"Could not generate Excel file: {e}"
+            )
 
-        # -------------------------------------------------
+
+        # =================================================
         # PDF REPORT
-        # -------------------------------------------------
+        # =================================================
 
-        st.subheader("PDF Report")
+        st.subheader(
+            "PDF Report"
+        )
 
         st.write(
-            "Generate a complete XRD characterization report "
-            "containing sample information, XRD plot, peak "
-            "information, calculated parameters, and interpretation."
+            "Generate a complete XRD characterization "
+            "report containing sample information, "
+            "XRD plot, peak information, calculated "
+            "parameters, and interpretation."
         )
 
 
@@ -693,15 +722,19 @@ except Exception as e:
                 "Generating PDF report..."
             ):
 
+                figure_path = None
+                pdf_path = None
+
                 try:
 
                     # -------------------------------------
-                    # CREATE MATPLOTLIB FIGURE
+                    # CREATE XRD FIGURE
                     # -------------------------------------
 
                     fig, ax = plt.subplots(
                         figsize=(10, 5)
                     )
+
 
                     ax.plot(
                         processed["two_theta"],
@@ -709,6 +742,7 @@ except Exception as e:
                         label="Raw",
                         linewidth=1
                     )
+
 
                     ax.plot(
                         processed["two_theta"],
@@ -719,7 +753,7 @@ except Exception as e:
 
 
                     # -------------------------------------
-                    # MARK DETECTED PEAKS
+                    # MARK GRAPHITIC PEAKS
                     # -------------------------------------
 
                     for peak_name in [
@@ -734,14 +768,18 @@ except Exception as e:
 
                         if peak is not None:
 
+                            peak_position = (
+                                peak["position"]
+                            )
+
                             ax.axvline(
-                                peak["position"],
+                                peak_position,
                                 linestyle="--",
                                 linewidth=0.8
                             )
 
                             ax.text(
-                                peak["position"],
+                                peak_position,
                                 peak["intensity"],
                                 peak_name,
                                 rotation=90,
@@ -771,7 +809,7 @@ except Exception as e:
 
 
                     # -------------------------------------
-                    # SAVE FIGURE TEMPORARILY
+                    # TEMPORARY IMAGE
                     # -------------------------------------
 
                     with tempfile.NamedTemporaryFile(
@@ -794,7 +832,7 @@ except Exception as e:
 
 
                     # -------------------------------------
-                    # CREATE PDF
+                    # TEMPORARY PDF
                     # -------------------------------------
 
                     with tempfile.NamedTemporaryFile(
@@ -807,18 +845,16 @@ except Exception as e:
                         )
 
 
+                    # -------------------------------------
+                    # CREATE PDF
+                    # -------------------------------------
+
                     create_pdf(
-
                         filename=pdf_path,
-
                         sample_info=sample_info,
-
                         analysis_type="XRD",
-
                         result=result,
-
                         interpretation=interpretation,
-
                         figure_path=figure_path
                     )
 
@@ -838,7 +874,7 @@ except Exception as e:
 
 
                     # -------------------------------------
-                    # DOWNLOAD BUTTON
+                    # SUCCESS
                     # -------------------------------------
 
                     st.success(
@@ -846,38 +882,34 @@ except Exception as e:
                     )
 
 
-                    st.download_button(
+                    # -------------------------------------
+                    # DOWNLOAD PDF
+                    # -------------------------------------
 
-                        label="📥 Download XRD PDF Report",
-
-                        data=pdf_data,
-
-                        file_name=(
-                            f"{sample_info.get('sample_name', 'XRD')}"
-                            "_XRD_Report.pdf"
-                        ),
-
-                        mime="application/pdf"
+                    safe_sample_name = (
+                        sample_info.get(
+                            "sample_name",
+                            ""
+                        ).strip()
                     )
 
 
-                    # -------------------------------------
-                    # CLEAN TEMP FILES
-                    # -------------------------------------
+                    if not safe_sample_name:
 
-                    try:
+                        safe_sample_name = "XRD"
 
-                        os.remove(
-                            figure_path
-                        )
 
-                        os.remove(
-                            pdf_path
-                        )
+                    pdf_filename = (
+                        f"{safe_sample_name}_XRD_Report.pdf"
+                    )
 
-                    except Exception:
 
-                        pass
+                    st.download_button(
+                        label="📥 Download XRD PDF Report",
+                        data=pdf_data,
+                        file_name=pdf_filename,
+                        mime="application/pdf"
+                    )
 
 
                 except Exception as e:
@@ -887,3 +919,35 @@ except Exception as e:
                     )
 
                     st.exception(e)
+
+
+                finally:
+
+                    # -------------------------------------
+                    # CLEAN TEMPORARY FILES
+                    # -------------------------------------
+
+                    if figure_path is not None:
+
+                        try:
+                            if os.path.exists(
+                                figure_path
+                            ):
+                                os.remove(
+                                    figure_path
+                                )
+                        except Exception:
+                            pass
+
+
+                    if pdf_path is not None:
+
+                        try:
+                            if os.path.exists(
+                                pdf_path
+                            ):
+                                os.remove(
+                                    pdf_path
+                                )
+                        except Exception:
+                            pass
