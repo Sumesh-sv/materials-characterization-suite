@@ -597,118 +597,79 @@ if uploaded_file is not None:
 
 
         # -------------------------------------------------
-        # EXCEL DOWNLOAD
-        # -------------------------------------------------
+# EXCEL DOWNLOAD
+# -------------------------------------------------
 
-        st.subheader(
-            "Download Results"
+st.subheader("Download Results")
+
+export_data = {
+    "Parameter": [
+        "d002 (nm)",
+        "Lc (nm)",
+        "Number of Layers",
+        "Packing Density (g/cm³)",
+        "Graphitization (%)"
+    ],
+    "Value": [
+        result.get("d002"),
+        result.get("Lc"),
+        result.get("Layers"),
+        result.get("Density"),
+        result.get("Graphitization")
+    ]
+}
+
+export_df = pd.DataFrame(export_data)
+
+excel_buffer = BytesIO()
+
+try:
+
+    with pd.ExcelWriter(
+        excel_buffer,
+        engine="openpyxl"
+    ) as writer:
+
+        # XRD calculated parameters
+        export_df.to_excel(
+            writer,
+            index=False,
+            sheet_name="XRD Results"
         )
 
-        export_data = {
+        # Detected peaks
+        if peak_rows:
 
-            "Parameter": [
-
-                "d002 (nm)",
-
-                "Lc (nm)",
-
-                "Number of Layers",
-
-                "Packing Density (g/cm³)",
-
-                "Graphitization (%)"
-
-            ],
-
-            "Value": [
-
-                result.get(
-                    "d002"
-                ),
-
-                result.get(
-                    "Lc"
-                ),
-
-                result.get(
-                    "Layers"
-                ),
-
-                result.get(
-                    "Density"
-                ),
-
-                result.get(
-                    "Graphitization"
-                )
-
-            ]
-        }
-
-
-        export_df = pd.DataFrame(
-            export_data
-        )
-
-
-        excel_buffer = BytesIO()
-
-
-        with pd.ExcelWriter(
-            excel_buffer,
-            engine="openpyxl"
-        ):
-
-            export_df.to_excel(
-                excel_buffer,
-                index=False,
-                sheet_name="XRD Results"
-            )
-
-            # Re-open correctly through ExcelWriter
-            # for the detected peak sheet
-        excel_buffer = BytesIO()
-
-        with pd.ExcelWriter(
-            excel_buffer,
-            engine="openpyxl"
-        ) as writer:
-
-            export_df.to_excel(
+            peak_df.to_excel(
                 writer,
                 index=False,
-                sheet_name="XRD Results"
+                sheet_name="Detected Peaks"
             )
 
-            if peak_rows:
-
-                peak_df.to_excel(
-                    writer,
-                    index=False,
-                    sheet_name="Detected Peaks"
-                )
-
-            info_display.to_excel(
-                writer,
-                index=False,
-                sheet_name="Sample Information"
-            )
-
-
-        st.download_button(
-
-            "📥 Download XRD Results",
-
-            data=excel_buffer.getvalue(),
-
-            file_name="XRD_Results.xlsx",
-
-            mime=(
-                "application/vnd.openxmlformats-officedocument."
-                "spreadsheetml.sheet"
-            )
+        # Sample information
+        info_display.to_excel(
+            writer,
+            index=False,
+            sheet_name="Sample Information"
         )
 
+    excel_data = excel_buffer.getvalue()
+
+    st.download_button(
+        label="📥 Download XRD Results",
+        data=excel_data,
+        file_name="XRD_Results.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        )
+    )
+
+except Exception as e:
+
+    st.error(
+        f"Could not generate Excel file: {e}"
+    )
 
         # -------------------------------------------------
         # PDF REPORT
