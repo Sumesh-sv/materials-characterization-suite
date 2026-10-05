@@ -72,7 +72,7 @@ if uploaded is not None:
 
     data = pd.read_csv(
         uploaded,
-        delim_whitespace=True,
+        sep=r"\s+",
         header=None
     )
 
